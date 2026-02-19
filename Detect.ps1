@@ -2,6 +2,22 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version Latest
 
+function Get-SafeStringPropertyValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Object,
+        [Parameter(Mandatory = $true)]
+        [string]$PropertyName
+    )
+
+    $property = $Object.PSObject.Properties[$PropertyName]
+    if (-not $property -or $null -eq $property.Value) {
+        return $null
+    }
+
+    return [string]$property.Value
+}
+
 function Test-EParakstitajsInstalled {
     $uninstallPaths = @(
         'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
@@ -10,7 +26,8 @@ function Test-EParakstitajsInstalled {
 
     $entry = Get-ItemProperty -Path $uninstallPaths -ErrorAction SilentlyContinue |
         Where-Object {
-            $_.DisplayName -and ($_.DisplayName -match '^eParakst.*3\.0')
+            $displayName = Get-SafeStringPropertyValue -Object $_ -PropertyName 'DisplayName'
+            $displayName -and ($displayName -match '^eParakst') -and ($displayName -match '3\.0')
         } |
         Select-Object -First 1
 

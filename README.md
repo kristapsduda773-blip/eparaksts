@@ -4,7 +4,7 @@ This package installs and uninstalls **eParakstitajs** through Winget in **SYSTE
 
 ## Files
 
-- `Install.ps1` - Installs latest `eParaksts.eParakstitajs` with machine scope.
+- `Install.ps1` - Installs latest `eParaksts.eParakstitajs` and retries with explicit architectures when needed.
 - `Uninstall.ps1` - Uninstalls with Winget, then MSI fallback cleanup.
 - `Detect.ps1` - Detects installation from HKLM uninstall entries (version-agnostic).
 
@@ -33,10 +33,11 @@ This package installs and uninstalls **eParakstitajs** through Winget in **SYSTE
 
 ### Requirements
 
-- Architecture: `x64`, `arm64` (as needed in your tenant policy)
+- Architecture: `x64` (recommended)
 - Minimum OS: your target baseline (example: Windows 11 24H2)
 
 ## Notes
 
 - Winget package ID used: `eParaksts.eParakstitajs`
 - Script installs **latest available version** from Winget.
+- The package currently publishes `x86`/`x64` installers in Winget; use `arm64` only after pilot validation.

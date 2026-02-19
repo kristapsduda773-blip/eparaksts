@@ -4,6 +4,23 @@ Set-StrictMode -Version Latest
 
 $PackageId = 'eParaksts.eParakstitajs'
 $rebootRequired = $false
+$WingetNoInstalledPackageCode = -1978335212
+
+function Get-SafeStringPropertyValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Object,
+        [Parameter(Mandatory = $true)]
+        [string]$PropertyName
+    )
+
+    $property = $Object.PSObject.Properties[$PropertyName]
+    if (-not $property -or $null -eq $property.Value) {
+        return $null
+    }
+
+    return [string]$property.Value
+}
 
 function Get-WingetPath {
     $command = Get-Command -Name 'winget.exe' -ErrorAction SilentlyContinue
@@ -38,7 +55,8 @@ function Get-EParakstitajsEntries {
 
     return Get-ItemProperty -Path $uninstallPaths -ErrorAction SilentlyContinue |
         Where-Object {
-            $_.DisplayName -and ($_.DisplayName -match '^eParakst.*3\.0')
+            $displayName = Get-SafeStringPropertyValue -Object $_ -PropertyName 'DisplayName'
+            $displayName -and ($displayName -match '^eParakst') -and ($displayName -match '3\.0')
         }
 }
 
@@ -58,12 +76,14 @@ function Get-InstalledProductCodes {
     $entries = Get-EParakstitajsEntries
 
     $codes = foreach ($entry in $entries) {
-        if ($entry.PSChildName -match '^\{[0-9A-Fa-f\-]{36}\}$') {
-            $entry.PSChildName
+        $childName = Get-SafeStringPropertyValue -Object $entry -PropertyName 'PSChildName'
+        if ($childName -and ($childName -match '^\{[0-9A-Fa-f\-]{36}\}$')) {
+            $childName
             continue
         }
 
-        if ($entry.UninstallString -and ($entry.UninstallString -match '\{[0-9A-Fa-f\-]{36}\}')) {
+        $uninstallString = Get-SafeStringPropertyValue -Object $entry -PropertyName 'UninstallString'
+        if ($uninstallString -and ($uninstallString -match '\{[0-9A-Fa-f\-]{36}\}')) {
             $Matches[0]
         }
     }
@@ -79,7 +99,6 @@ try {
         '--exact',
         '--source', 'winget',
         '--silent',
-        '--scope', 'machine',
         '--disable-interactivity'
     )
 
@@ -89,6 +108,9 @@ try {
                                    -PassThru `
                                    -NoNewWindow
     Write-Host "Winget uninstall exit code: $($wingetProcess.ExitCode)"
+    if ($wingetProcess.ExitCode -eq $WingetNoInstalledPackageCode) {
+        Write-Host 'Winget did not find an installed package for this ID. Continuing with MSI fallback checks.'
+    }
 } catch {
     Write-Host "Winget uninstall step skipped: $($_.Exception.Message)"
 }
