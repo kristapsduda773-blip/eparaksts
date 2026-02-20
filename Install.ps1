@@ -5,6 +5,16 @@ Set-StrictMode -Version Latest
 $PackageId = 'eParaksts.eParakstitajs'
 $WingetNoApplicableInstallerCode = -1978335216
 
+function Test-IsElevatedOrSystem {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    if ($identity.Name -eq 'NT AUTHORITY\SYSTEM') {
+        return $true
+    }
+
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
 function Get-WingetPath {
     $command = Get-Command -Name 'winget.exe' -ErrorAction SilentlyContinue
     if ($command -and $command.Source) {
@@ -45,6 +55,11 @@ function Invoke-Winget {
                              -PassThru `
                              -NoNewWindow
     return $process.ExitCode
+}
+
+if (-not (Test-IsElevatedOrSystem)) {
+    Write-Host 'Install must run elevated or in SYSTEM context (Intune install behavior: System).'
+    exit 1
 }
 
 $wingetPath = Get-WingetPath
@@ -123,7 +138,7 @@ foreach ($attempt in $attempts) {
 }
 
 if ($finalExitCode -eq $WingetNoApplicableInstallerCode) {
-    Write-Host "Install failed for $PackageId: no applicable Winget installer for this device."
+    Write-Host "Install failed for ${PackageId}: no applicable Winget installer for this device."
     Write-Host 'Tip: package currently publishes x86/x64 installers; verify device architecture support and App Installer version.'
 } else {
     Write-Host "Install failed for $PackageId with exit code $finalExitCode."

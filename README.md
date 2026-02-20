@@ -21,6 +21,7 @@ This package installs and uninstalls **eParakstitajs** through Winget in **SYSTE
 
 > Do not use `cmd.exe /c start ...` for Win32 install/uninstall commands.  
 > `start` can return before the script finishes, causing false success/failure in Intune.
+> Scripts require elevated/SYSTEM context.
 
 ### Detection rules
 
