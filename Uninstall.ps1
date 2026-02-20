@@ -6,6 +6,39 @@ $PackageId = 'eParaksts.eParakstitajs'
 $rebootRequired = $false
 $WingetNoInstalledPackageCode = -1978335212
 
+function Restart-In64BitPowerShellIfNeeded {
+    if (-not [Environment]::Is64BitOperatingSystem) {
+        return
+    }
+
+    if ([Environment]::Is64BitProcess) {
+        return
+    }
+
+    if (-not $PSCommandPath) {
+        return
+    }
+
+    $sysNativePowerShell = Join-Path -Path $env:WINDIR -ChildPath 'Sysnative\WindowsPowerShell\v1.0\powershell.exe'
+    if (-not (Test-Path -LiteralPath $sysNativePowerShell)) {
+        return
+    }
+
+    Write-Host 'Relaunching uninstall script in 64-bit PowerShell for Intune compatibility.'
+    $relaunchArgs = @(
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', "`"$PSCommandPath`""
+    )
+
+    $relaunchProcess = Start-Process -FilePath $sysNativePowerShell `
+                                     -ArgumentList $relaunchArgs `
+                                     -Wait `
+                                     -PassThru `
+                                     -NoNewWindow
+    exit $relaunchProcess.ExitCode
+}
+
 function Test-IsElevatedOrSystem {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     if ($identity.Name -eq 'NT AUTHORITY\SYSTEM') {
@@ -112,24 +145,62 @@ function Test-ShortcutTargetExists {
 
 function Get-WingetPath {
     $command = Get-Command -Name 'winget.exe' -ErrorAction SilentlyContinue
-    if ($command -and $command.Source) {
+    if ($command -and $command.Source -and (Test-Path -LiteralPath $command.Source)) {
         return $command.Source
     }
 
+    $candidatePaths = @()
+
+    try {
+        $appInstaller = Get-AppxPackage -AllUsers -Name 'Microsoft.DesktopAppInstaller' -ErrorAction SilentlyContinue |
+            Sort-Object -Property Version -Descending |
+            Select-Object -First 1
+        if ($appInstaller) {
+            $installLocationProperty = $appInstaller.PSObject.Properties['InstallLocation']
+            if ($installLocationProperty -and $installLocationProperty.Value) {
+                $appxWinget = Join-Path -Path ([string]$installLocationProperty.Value) -ChildPath 'winget.exe'
+                if (Test-Path -LiteralPath $appxWinget) {
+                    $candidatePaths += $appxWinget
+                }
+            }
+        }
+    } catch {
+        # Ignore and continue with path-based discovery.
+    }
+
+    $programRoots = @(
+        $env:ProgramW6432,
+        $env:ProgramFiles,
+        'C:\Program Files'
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
+
     $searchPatterns = @(
-        "$env:ProgramFiles\WindowsApps\Microsoft.DesktopAppInstaller_*_x64__8wekyb3d8bbwe\winget.exe",
-        "$env:ProgramFiles\WindowsApps\Microsoft.DesktopAppInstaller_*_neutral_*_8wekyb3d8bbwe\winget.exe",
-        "$env:LocalAppData\Microsoft\WindowsApps\winget.exe"
+        'WindowsApps\Microsoft.DesktopAppInstaller_*_x64__8wekyb3d8bbwe\winget.exe',
+        'WindowsApps\Microsoft.DesktopAppInstaller_*_neutral_*_8wekyb3d8bbwe\winget.exe'
     )
 
-    foreach ($pattern in $searchPatterns) {
-        $candidate = Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue |
-            Sort-Object -Property FullName -Descending |
-            Select-Object -First 1
+    foreach ($root in $programRoots) {
+        foreach ($pattern in $searchPatterns) {
+            $candidate = Get-ChildItem -Path (Join-Path -Path $root -ChildPath $pattern) -File -ErrorAction SilentlyContinue |
+                Sort-Object -Property FullName -Descending |
+                Select-Object -First 1
 
-        if ($candidate) {
-            return $candidate.FullName
+            if ($candidate) {
+                $candidatePaths += $candidate.FullName
+            }
         }
+    }
+
+    $localWinget = Join-Path -Path $env:LocalAppData -ChildPath 'Microsoft\WindowsApps\winget.exe'
+    if ($env:LocalAppData -and (Test-Path -LiteralPath $localWinget)) {
+        $candidatePaths += $localWinget
+    }
+
+    $resolvedPath = $candidatePaths |
+        Sort-Object -Unique -Descending |
+        Select-Object -First 1
+    if ($resolvedPath) {
+        return $resolvedPath
     }
 
     throw 'winget.exe was not found.'
@@ -184,8 +255,13 @@ if (-not (Test-IsElevatedOrSystem)) {
     exit 1
 }
 
+Restart-In64BitPowerShellIfNeeded
+Write-Host ("Running as: {0}" -f [Security.Principal.WindowsIdentity]::GetCurrent().Name)
+Write-Host ("PowerShell process architecture: {0}" -f $(if ([Environment]::Is64BitProcess) { 'x64' } else { 'x86' }))
+
 try {
     $wingetPath = Get-WingetPath
+    Write-Host "Resolved winget path: $wingetPath"
     $wingetArguments = @(
         'uninstall',
         '--id', $PackageId,

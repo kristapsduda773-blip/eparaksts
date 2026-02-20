@@ -13,15 +13,16 @@ This package installs and uninstalls **eParakstitajs** through Winget in **SYSTE
 ### Program
 
 - **Install command**
-  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1`
+  - `%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1`
 - **Uninstall command**
-  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Uninstall.ps1`
+  - `%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Uninstall.ps1`
 - **Install behavior**
   - `System`  **(important)**
 
 > Do not use `cmd.exe /c start ...` for Win32 install/uninstall commands.  
 > `start` can return before the script finishes, causing false success/failure in Intune.
 > Scripts require elevated/SYSTEM context.
+> Using `Sysnative` forces 64-bit PowerShell even when Intune runs from a 32-bit host process.
 
 ### Detection rules
 
@@ -43,3 +44,11 @@ This package installs and uninstalls **eParakstitajs** through Winget in **SYSTE
 - Script installs **latest available version** from Winget.
 - The package currently publishes `x86`/`x64` installers in Winget; use `arm64` only after pilot validation.
 - During install/uninstall, Windows Explorer may briefly restart because of shell integration changes made by the vendor MSI.
+
+## Troubleshooting (Company Portal)
+
+- Check `C:\ProgramData\Microsoft\IntuneManagementExtension\Logs\IntuneManagementExtension.log`
+- In script output, verify:
+  - `Running as: NT AUTHORITY\SYSTEM`
+  - `PowerShell process architecture: x64`
+  - `Resolved winget path: ...\winget.exe`
