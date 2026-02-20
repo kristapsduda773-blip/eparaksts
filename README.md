@@ -42,3 +42,4 @@ This package installs and uninstalls **eParakstitajs** through Winget in **SYSTE
 - Winget package ID used: `eParaksts.eParakstitajs`
 - Script installs **latest available version** from Winget.
 - The package currently publishes `x86`/`x64` installers in Winget; use `arm64` only after pilot validation.
+- During install/uninstall, Windows Explorer may briefly restart because of shell integration changes made by the vendor MSI.
