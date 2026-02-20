@@ -57,6 +57,48 @@ function Invoke-Winget {
     return $process.ExitCode
 }
 
+function Get-OsArchitecture {
+    # RuntimeInformation.OSArchitecture is unavailable on some older .NET/PowerShell combinations.
+    $runtimeType = [System.Runtime.InteropServices.RuntimeInformation]
+    $osArchProperty = $runtimeType.GetProperty('OSArchitecture', [System.Reflection.BindingFlags]::Public -bor [System.Reflection.BindingFlags]::Static)
+    if ($osArchProperty) {
+        try {
+            $runtimeArchitecture = $runtimeType::OSArchitecture.ToString().ToLowerInvariant()
+            if ($runtimeArchitecture) {
+                return $runtimeArchitecture
+            }
+        } catch {
+            # Ignore and continue to environment-based fallback.
+        }
+    }
+
+    $archCandidates = @(
+        $env:PROCESSOR_ARCHITECTURE,
+        $env:PROCESSOR_ARCHITEW6432
+    ) | Where-Object { $_ }
+
+    foreach ($candidate in $archCandidates) {
+        $arch = $candidate.ToLowerInvariant()
+        if ($arch -eq 'arm64') {
+            return 'arm64'
+        }
+
+        if ($arch -eq 'amd64' -or $arch -eq 'x64') {
+            return 'x64'
+        }
+
+        if ($arch -eq 'x86' -or $arch -eq 'i386' -or $arch -eq 'i686') {
+            return 'x86'
+        }
+    }
+
+    if ([Environment]::Is64BitOperatingSystem) {
+        return 'x64'
+    }
+
+    return 'x86'
+}
+
 if (-not (Test-IsElevatedOrSystem)) {
     Write-Host 'Install must run elevated or in SYSTEM context (Intune install behavior: System).'
     exit 1
@@ -81,7 +123,8 @@ $attempts += ,@{
 }
 
 # Explicit architecture retries help when Winget cannot auto-select a compatible installer.
-$osArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+$osArchitecture = Get-OsArchitecture
+Write-Host "Detected OS architecture: $osArchitecture"
 if ($osArchitecture -eq 'arm64' -or $osArchitecture -eq 'x64') {
     $attempts += ,@{
         Name = 'x64'
